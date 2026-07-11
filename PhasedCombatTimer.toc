@@ -1,0 +1,16 @@
+## Interface: 120007
+## Title: Phased Combat Timer
+## Notes: Displays encounter and phase timers using Northern Sky Raid Tools phase detection.
+## Author: Yvairel
+## Version: 12.0.7-1
+## Dependencies: NorthernSkyRaidTools
+## SavedVariables: PhasedCombatTimerDB
+
+Libs\LibStub\LibStub.lua
+Libs\LibSimpleDB-1.0\embed.xml
+Libs\LibEditMode\embed.xml
+Libs\LibSharedMedia-3.0\lib.xml
+
+Database.lua
+Settings.lua
+Core.lua
