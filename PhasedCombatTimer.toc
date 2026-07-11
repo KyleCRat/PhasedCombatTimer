@@ -7,6 +7,7 @@
 ## SavedVariables: PhasedCombatTimerDB
 
 Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
 Libs\LibSimpleDB-1.0\embed.xml
 Libs\LibEditMode\embed.xml
 Libs\LibSharedMedia-3.0\lib.xml

@@ -20,10 +20,43 @@ local PLACEMENT_OPTIONS = {
     { text = "Left", value = "LEFT" },
 }
 
+local VALID_ANCHOR_POINTS = {
+    TOPLEFT = true,
+    TOP = true,
+    TOPRIGHT = true,
+    LEFT = true,
+    CENTER = true,
+    RIGHT = true,
+    BOTTOMLEFT = true,
+    BOTTOM = true,
+    BOTTOMRIGHT = true,
+}
+
 function PCT:RestorePosition()
-    local pos = self.db:Get("position")
+    if not self.frame or not self.db then
+        return
+    end
+
+    local point = self.db:Get("position", "point")
+    local relativePoint = self.db:Get("position", "relativePoint")
+    local x = self.db:Get("position", "x")
+    local y = self.db:Get("position", "y")
+
+    if not VALID_ANCHOR_POINTS[point] then
+        point = DEFAULTS.position.point
+    end
+    if not VALID_ANCHOR_POINTS[relativePoint] then
+        relativePoint = DEFAULTS.position.relativePoint
+    end
+    if type(x) ~= "number" then
+        x = DEFAULTS.position.x
+    end
+    if type(y) ~= "number" then
+        y = DEFAULTS.position.y
+    end
+
     self.frame:ClearAllPoints()
-    self.frame:SetPoint(pos.point, UIParent, pos.relativePoint or pos.point, pos.x, pos.y)
+    self.frame:SetPoint(point, UIParent, relativePoint, x, y)
 end
 
 local function OnPositionChanged(frame, layoutName, point, x, y)
@@ -101,7 +134,7 @@ local function SetAndApply(value, ...)
     args[#args + 1] = value
     PCT.db:Set(unpack(args))
     PCT:ApplySettings()
-    PCT:UpdateVisibility()
+    PCT:RefreshCombatTracking()
 end
 
 local function CreateCheckboxSetting(name, path, disabled)
@@ -265,13 +298,16 @@ function PCT:RegisterEditModeSettings()
         { name = "Behavior", kind = LEM.SettingType.Divider, collapsed = false },
         CreateCheckboxSetting("Enabled", { "enabled" }),
         CreateCheckboxSetting("Only Show During Encounter", { "showOnlyDuringEncounter" }),
-        CreateCheckboxSetting("Use Out Of Combat Opacity", { "useOutOfCombatOpacity" }, function()
+        CreateCheckboxSetting("Hide Out Of Combat", { "hideOutOfCombat" }, function()
             return PCT.db:Get("showOnlyDuringEncounter")
+        end),
+        CreateCheckboxSetting("Use Out Of Combat Opacity", { "useOutOfCombatOpacity" }, function()
+            return PCT.db:Get("showOnlyDuringEncounter") or PCT.db:Get("hideOutOfCombat")
         end),
         CreateSliderSetting("Out Of Combat Opacity", { "outOfCombatOpacity" }, 0.05, 1, 0.05, function(value)
             return string.format("%d%%", math.floor((value * 100) + 0.5))
         end, function()
-            return PCT.db:Get("showOnlyDuringEncounter") or not PCT.db:Get("useOutOfCombatOpacity")
+            return PCT.db:Get("showOnlyDuringEncounter") or PCT.db:Get("hideOutOfCombat") or not PCT.db:Get("useOutOfCombatOpacity")
         end),
         CreateCheckboxSetting("Show Labels", { "showLabels" }),
         CreateCheckboxSetting("Show Tenths Under 60s", { "showTenths" }),

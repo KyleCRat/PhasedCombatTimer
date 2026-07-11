@@ -5,6 +5,7 @@ local SimpleDB = LibStub("LibSimpleDB-1.0")
 local DEFAULTS = {
     enabled = true,
     showOnlyDuringEncounter = false,
+    hideOutOfCombat = false,
     useOutOfCombatOpacity = true,
     outOfCombatOpacity = 0.35,
     showLabels = true,
