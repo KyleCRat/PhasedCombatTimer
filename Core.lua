@@ -34,6 +34,15 @@ local editModePreview = {
     phase = 1,
     showTenths = false,
 }
+local displaySettings = {
+    showTenths = false,
+    showLabels = true,
+    combatLabel = "",
+    phaseLabel = "P",
+}
+local displayCache = {
+    valid = false,
+}
 
 local function IsInEditMode()
     return LEM and LEM:IsInEditMode()
@@ -59,14 +68,25 @@ local function ShouldShowTimer()
     return not PCT.db:Get("hideOutOfCombat")
 end
 
+local function RefreshDisplaySettings()
+    displaySettings.showTenths = PCT.db:Get("showTenths")
+    displaySettings.showLabels = PCT.db:Get("showLabels")
+    displaySettings.combatLabel = PCT.db:Get("combatLabel")
+    displaySettings.phaseLabel = PCT.db:Get("phaseLabel")
+end
+
+local function InvalidateDisplayCache()
+    displayCache.valid = false
+end
+
 local function ResetEditModePreview()
     editModePreview.nextUpdate = 0
     editModePreview.bucketIndex = 0
-    editModePreview.showTenths = PCT.db and PCT.db:Get("showTenths") or false
+    editModePreview.showTenths = displaySettings.showTenths
 end
 
 local function GetEditModePreviewBucketCount()
-    if PCT.db:Get("showTenths") then
+    if displaySettings.showTenths then
         return 3
     end
 
@@ -86,7 +106,7 @@ local function GetRandomPreviewSeconds(bucket)
 end
 
 local function RefreshEditModePreview(now)
-    local showTenths = PCT.db:Get("showTenths")
+    local showTenths = displaySettings.showTenths
     if editModePreview.nextUpdate > now and editModePreview.showTenths == showTenths then
         return
     end
@@ -108,7 +128,7 @@ end
 local function FormatTime(seconds)
     seconds = math.max(seconds or 0, 0)
 
-    if PCT.db:Get("showTenths") and seconds < 60 then
+    if displaySettings.showTenths and seconds < 60 then
         return string.format("%.1f", seconds)
     end
 
@@ -118,7 +138,7 @@ local function FormatTime(seconds)
 end
 
 local function FormatTimer(label, seconds)
-    if PCT.db:Get("showLabels") and label and label ~= "" then
+    if displaySettings.showLabels and label and label ~= "" then
         return label .. FormatTime(seconds)
     end
 
@@ -126,15 +146,15 @@ local function FormatTimer(label, seconds)
 end
 
 local function FormatPhaseTimer(label, seconds)
-    if PCT.db:Get("showLabels") and label and label ~= "" then
+    if displaySettings.showLabels and label and label ~= "" then
         return label .. " " .. FormatTime(seconds)
     end
 
     return FormatTime(seconds)
 end
 
-local function GetDisplayPhase()
-    if IsInEditMode() then
+local function GetDisplayPhase(isInEditMode)
+    if isInEditMode then
         return editModePreview.phase
     end
 
@@ -146,15 +166,11 @@ local function GetDisplayPhase()
 end
 
 local function FormatPhaseLabelForPhase(phase)
-    if PCT.db:Get("showLabels") then
-        return PCT.db:Get("phaseLabel") .. tostring(phase or 1)
+    if displaySettings.showLabels then
+        return displaySettings.phaseLabel .. tostring(phase or 1)
     end
 
     return ""
-end
-
-local function FormatPhaseLabel()
-    return FormatPhaseLabelForPhase(GetDisplayPhase())
 end
 
 local function GetFontPath()
@@ -193,7 +209,7 @@ local function MeasureText(text)
 end
 
 local function MeasureTimerBox(label, timeText, timeWidth, timeHeight)
-    if PCT.db:Get("showLabels") and label and label ~= "" then
+    if displaySettings.showLabels and label and label ~= "" then
         return MeasureText(label .. timeText)
     end
 
@@ -201,7 +217,7 @@ local function MeasureTimerBox(label, timeText, timeWidth, timeHeight)
 end
 
 local function MeasurePhaseTimerBox(label, timeText, timeWidth, timeHeight)
-    if PCT.db:Get("showLabels") and label and label ~= "" then
+    if displaySettings.showLabels and label and label ~= "" then
         return MeasureText(label .. " " .. timeText)
     end
 
@@ -211,7 +227,7 @@ end
 local function GetTextMetrics()
     local timeText = TIMER_WIDTH_SAMPLE_TEXT
     local timeWidth, timeHeight = MeasureText(timeText)
-    if PCT.db:Get("showTenths") then
+    if displaySettings.showTenths then
         local tenthsWidth, tenthsHeight = MeasureText(TENTHS_WIDTH_SAMPLE_TEXT)
         if tenthsWidth > timeWidth then
             timeText = TENTHS_WIDTH_SAMPLE_TEXT
@@ -220,7 +236,7 @@ local function GetTextMetrics()
         timeHeight = math.max(timeHeight, tenthsHeight)
     end
 
-    local combatWidth, combatHeight = MeasureTimerBox(PCT.db:Get("combatLabel"), timeText, timeWidth, timeHeight)
+    local combatWidth, combatHeight = MeasureTimerBox(displaySettings.combatLabel, timeText, timeWidth, timeHeight)
     local phaseWidth, phaseHeight = MeasurePhaseTimerBox(FormatPhaseLabelForPhase(MAX_PHASE_NUMBER), timeText, timeWidth, timeHeight)
     local minimumHeight = math.max(1, PCT.db:Get("fontSize"))
 
@@ -292,6 +308,8 @@ function PCT:ApplySettings()
         return
     end
 
+    RefreshDisplaySettings()
+    InvalidateDisplayCache()
     ApplyTextStyle()
     ApplyBackgroundStyle()
     ApplyLayout()
@@ -306,7 +324,8 @@ function PCT:UpdateDisplay()
     local now = GetTime()
     local totalElapsed
     local phaseElapsed
-    if IsInEditMode() then
+    local isInEditMode = IsInEditMode()
+    if isInEditMode then
         RefreshEditModePreview(now)
         totalElapsed = editModePreview.combatSeconds
         phaseElapsed = editModePreview.phaseSeconds
@@ -315,8 +334,37 @@ function PCT:UpdateDisplay()
         phaseElapsed = phaseStartTime and (now - phaseStartTime) or (finalPhaseElapsed or 0)
     end
 
-    self.frame.combatText:SetText(FormatTimer(PCT.db:Get("combatLabel"), totalElapsed))
-    self.frame.phaseText:SetText(FormatPhaseTimer(FormatPhaseLabel(), phaseElapsed))
+    local combatUsesTenths = displaySettings.showTenths and totalElapsed < 60
+    local phaseUsesTenths = displaySettings.showTenths and phaseElapsed < 60
+    local combatBucket = combatUsesTenths and math.floor((totalElapsed * 10) + 0.5) or math.floor(totalElapsed)
+    local phaseBucket = phaseUsesTenths and math.floor((phaseElapsed * 10) + 0.5) or math.floor(phaseElapsed)
+    local displayPhase = GetDisplayPhase(isInEditMode)
+    local combatChanged = not displayCache.valid
+        or displayCache.combatBucket ~= combatBucket
+        or displayCache.combatUsesTenths ~= combatUsesTenths
+    local phaseChanged = not displayCache.valid
+        or displayCache.phaseBucket ~= phaseBucket
+        or displayCache.phaseUsesTenths ~= phaseUsesTenths
+        or displayCache.phase ~= displayPhase
+
+    if not combatChanged and not phaseChanged then
+        return
+    end
+
+    if combatChanged then
+        self.frame.combatText:SetText(FormatTimer(displaySettings.combatLabel, totalElapsed))
+    end
+    if phaseChanged then
+        local phaseLabel = FormatPhaseLabelForPhase(displayPhase)
+        self.frame.phaseText:SetText(FormatPhaseTimer(phaseLabel, phaseElapsed))
+    end
+
+    displayCache.valid = true
+    displayCache.combatBucket = combatBucket
+    displayCache.combatUsesTenths = combatUsesTenths
+    displayCache.phaseBucket = phaseBucket
+    displayCache.phaseUsesTenths = phaseUsesTenths
+    displayCache.phase = displayPhase
 end
 
 function PCT:UpdateAlpha()
@@ -369,7 +417,6 @@ function PCT:StartTicker()
 
     self.ticker = C_Timer.NewTicker(0.1, function()
         PCT:UpdateDisplay()
-        PCT:UpdateVisibility()
     end)
 end
 
@@ -391,8 +438,11 @@ function PCT:StartEncounter()
     finalCombatElapsed = nil
     finalPhaseElapsed = nil
     finalPhase = nil
-    self:StartTicker()
-    self:UpdateDisplay()
+    InvalidateDisplayCache()
+    if PCT.db:Get("enabled") then
+        self:StartTicker()
+        self:UpdateDisplay()
+    end
     self:UpdateVisibility()
 end
 
@@ -411,6 +461,7 @@ function PCT:StartCombat()
     finalCombatElapsed = nil
     finalPhaseElapsed = nil
     finalPhase = nil
+    InvalidateDisplayCache()
     self:StartTicker()
     self:UpdateDisplay()
     self:UpdateVisibility()
@@ -429,6 +480,7 @@ function PCT:EndCombat()
     trackingCombat = false
     encounterStartTime = nil
     phaseStartTime = nil
+    InvalidateDisplayCache()
     if not previewMode and not IsInEditMode() then
         self:StopTicker()
     end
@@ -438,6 +490,11 @@ end
 
 function PCT:RefreshCombatTracking()
     if inEncounter then
+        if PCT.db:Get("enabled") then
+            self:StartTicker()
+        else
+            self:StopTicker()
+        end
         self:UpdateVisibility()
         return
     end
@@ -459,6 +516,7 @@ function PCT:EndEncounter()
     trackingCombat = false
     encounterStartTime = nil
     phaseStartTime = nil
+    InvalidateDisplayCache()
     if not previewMode then
         self:StopTicker()
     end
@@ -493,8 +551,11 @@ function PCT:SetPhase(phase, encounterID, testrun)
     end
 
     self.encounterID = encounterID
-    self:StartTicker()
-    self:UpdateDisplay()
+    InvalidateDisplayCache()
+    if PCT.db:Get("enabled") then
+        self:StartTicker()
+        self:UpdateDisplay()
+    end
     self:UpdateVisibility()
 end
 
@@ -519,6 +580,7 @@ end
 
 function PCT:OnEditModeEnter()
     ResetEditModePreview()
+    InvalidateDisplayCache()
     PCT:ApplySettings()
     PCT:StartTicker()
     PCT:UpdateDisplay()
@@ -527,6 +589,7 @@ end
 
 function PCT:OnEditModeExit()
     ResetEditModePreview()
+    InvalidateDisplayCache()
     if not inEncounter and not trackingCombat and not previewMode then
         PCT:StopTicker()
     end
@@ -568,6 +631,7 @@ function PCT:TogglePreview()
     end
 
     previewMode = not previewMode
+    InvalidateDisplayCache()
     if previewMode then
         local now = GetTime()
         encounterStartTime = now - 75
