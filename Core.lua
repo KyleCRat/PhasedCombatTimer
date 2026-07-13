@@ -18,7 +18,7 @@ local finalPhase
 local TIMER_WIDTH_SAMPLE_TEXT = "99:99"
 local TENTHS_WIDTH_SAMPLE_TEXT = "59.9"
 local TEXT_WIDTH_SAFETY_PADDING = 8
-local MAX_PHASE_NUMBER = 9
+local PHASE_WIDTH_SAMPLE = "99.9"
 local EDIT_MODE_PREVIEW_INTERVAL = 1.2
 local EDIT_MODE_PREVIEW_PHASE_MAX = 9
 local EDIT_MODE_PREVIEW_BUCKETS = {
@@ -237,7 +237,7 @@ local function GetTextMetrics()
     end
 
     local combatWidth, combatHeight = MeasureTimerBox(displaySettings.combatLabel, timeText, timeWidth, timeHeight)
-    local phaseWidth, phaseHeight = MeasurePhaseTimerBox(FormatPhaseLabelForPhase(MAX_PHASE_NUMBER), timeText, timeWidth, timeHeight)
+    local phaseWidth, phaseHeight = MeasurePhaseTimerBox(FormatPhaseLabelForPhase(PHASE_WIDTH_SAMPLE), timeText, timeWidth, timeHeight)
     local minimumHeight = math.max(1, PCT.db:Get("fontSize"))
 
     return {
@@ -559,7 +559,11 @@ function PCT:SetPhase(phase, encounterID, testrun)
     self:UpdateVisibility()
 end
 
-local function OnNSRTPhase(event, phase, encounterID, testrun)
+local function OnNSRTPhase(owner, event, phase, encounterID, testrun)
+    if owner ~= PCT or event ~= "NSRT_PHASE" then
+        return
+    end
+
     PCT:SetPhase(phase, encounterID, testrun)
 end
 
@@ -703,7 +707,8 @@ local function OnAddonLoaded(self, loadedAddon)
     PCT:RegisterEditModeSettings()
     RegisterSlashCommands()
 
-    NSAPI.RegisterCallback(PCT, "NSRT_PHASE", OnNSRTPhase)
+    -- NSAPI forwards its owner argument before the callback event payload.
+    NSAPI.RegisterCallback(PCT, "NSRT_PHASE", OnNSRTPhase, PCT)
     LSM.RegisterCallback(PCT, "LibSharedMedia_Registered", OnSharedMediaRegistered)
 
     self:RegisterEvent("ENCOUNTER_START")
