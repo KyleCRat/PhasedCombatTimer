@@ -2,7 +2,7 @@
 ## Title: Phased Combat Timer
 ## Notes: Displays encounter and phase timers using Northern Sky Raid Tools phase detection.
 ## Author: Yvairel
-## Version: 12.0.7-1
+## Version: 12.0.7-2
 ## Category: Raid
 ## IconTexture: Interface\AddOns\PhasedCombatTimer\phased_combat_timer.tga
 ## Dependencies: NorthernSkyRaidTools
