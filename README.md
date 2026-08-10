@@ -44,5 +44,5 @@ Settings and position are stored account-wide.
 
 ## Compatibility
 
-- Supports World of Warcraft 12.0.7.
+- Supports World of Warcraft 12.0.7 and 12.1.0.
 - Requires Northern Sky Raid Tools for encounter phase detection.
