@@ -1,10 +1,8 @@
 package-as: PhasedCombatTimer
 
 manual-changelog:
-  filename: CHANGELOG.md
-  markup-type: markdown
+    filename: CHANGELOG.md
+    markup-type: markdown
 
 ignore:
-  - .pkgmeta
-  - .git
-  - "*.png"
+    - "*.png"
