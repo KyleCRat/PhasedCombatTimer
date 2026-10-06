@@ -8,6 +8,7 @@ local isInitialized = false
 local inEncounter = false
 local trackingCombat = false
 local previewMode = false
+local activeEncounterID
 local encounterStartTime
 local phaseStartTime
 local currentPhase = 1
@@ -77,6 +78,34 @@ end
 
 local function InvalidateDisplayCache()
     displayCache.valid = false
+end
+
+local function IsValidPhase(phase)
+    return type(phase) == "number"
+        and phase == phase
+        and phase > 0
+        and phase < math.huge
+end
+
+local function RestoreLastResult()
+    finalCombatElapsed, finalPhaseElapsed, finalPhase = PCT:LoadLastResult()
+    if finalPhase then
+        currentPhase = finalPhase
+    end
+end
+
+local function ClearFinalResult()
+    finalCombatElapsed = nil
+    finalPhaseElapsed = nil
+    finalPhase = nil
+    PCT:ClearLastResult()
+end
+
+local function CaptureFinalResult(now)
+    finalCombatElapsed = encounterStartTime and math.max(now - encounterStartTime, 0) or (finalCombatElapsed or 0)
+    finalPhaseElapsed = phaseStartTime and math.max(now - phaseStartTime, 0) or (finalPhaseElapsed or 0)
+    finalPhase = currentPhase or finalPhase or 1
+    PCT:SaveLastResult(finalCombatElapsed, finalPhaseElapsed, finalPhase)
 end
 
 local function ResetEditModePreview()
@@ -427,136 +456,121 @@ function PCT:StopTicker()
     end
 end
 
-function PCT:StartEncounter()
+local function ShouldRunTicker()
+    if previewMode or IsInEditMode() then
+        return true
+    end
+
+    if not PCT.db:Get("enabled") then
+        return false
+    end
+
+    if inEncounter then
+        return true
+    end
+
+    return trackingCombat and not PCT.db:Get("showOnlyDuringEncounter")
+end
+
+function PCT:RefreshPresentation()
+    if ShouldRunTicker() then
+        self:StartTicker()
+    else
+        self:StopTicker()
+    end
+
+    self:UpdateDisplay()
+    self:UpdateVisibility()
+end
+
+function PCT:StartEncounter(encounterID)
+    if inEncounter and activeEncounterID == encounterID then
+        self:RefreshPresentation()
+        return
+    end
+
     local now = GetTime()
     inEncounter = true
     trackingCombat = false
     previewMode = false
+    activeEncounterID = encounterID
     encounterStartTime = now
     phaseStartTime = now
     currentPhase = 1
-    finalCombatElapsed = nil
-    finalPhaseElapsed = nil
-    finalPhase = nil
+    ClearFinalResult()
     InvalidateDisplayCache()
-    if PCT.db:Get("enabled") then
-        self:StartTicker()
-        self:UpdateDisplay()
-    end
-    self:UpdateVisibility()
+    self:RefreshPresentation()
 end
 
 function PCT:StartCombat()
     if inEncounter or trackingCombat then
-        self:UpdateVisibility()
+        self:RefreshPresentation()
         return
     end
 
     local now = GetTime()
     trackingCombat = true
     previewMode = false
+    activeEncounterID = nil
     encounterStartTime = now
     phaseStartTime = now
     currentPhase = 1
-    finalCombatElapsed = nil
-    finalPhaseElapsed = nil
-    finalPhase = nil
+    ClearFinalResult()
     InvalidateDisplayCache()
-    self:StartTicker()
-    self:UpdateDisplay()
-    self:UpdateVisibility()
+    self:RefreshPresentation()
 end
 
 function PCT:EndCombat()
     if not trackingCombat then
-        self:UpdateVisibility()
+        self:RefreshPresentation()
         return
     end
 
-    local now = GetTime()
-    finalCombatElapsed = encounterStartTime and (now - encounterStartTime) or finalCombatElapsed
-    finalPhaseElapsed = phaseStartTime and (now - phaseStartTime) or finalPhaseElapsed
-    finalPhase = currentPhase or finalPhase or 1
+    CaptureFinalResult(GetTime())
     trackingCombat = false
     encounterStartTime = nil
     phaseStartTime = nil
     InvalidateDisplayCache()
-    if not previewMode and not IsInEditMode() then
-        self:StopTicker()
-    end
-    self:UpdateDisplay()
-    self:UpdateVisibility()
+    self:RefreshPresentation()
 end
 
-function PCT:RefreshCombatTracking()
-    if inEncounter then
-        if PCT.db:Get("enabled") then
-            self:StartTicker()
-        else
-            self:StopTicker()
-        end
-        self:UpdateVisibility()
+function PCT:EndEncounter(encounterID)
+    if not inEncounter or (activeEncounterID and encounterID and activeEncounterID ~= encounterID) then
+        self:RefreshPresentation()
         return
     end
 
-    if PCT.db:Get("enabled") and not PCT.db:Get("showOnlyDuringEncounter") and IsPlayerInCombat() then
-        self:StartCombat()
-    else
-        self:EndCombat()
-    end
-end
-
-function PCT:EndEncounter()
-    local now = GetTime()
-    finalCombatElapsed = encounterStartTime and (now - encounterStartTime) or finalCombatElapsed
-    finalPhaseElapsed = phaseStartTime and (now - phaseStartTime) or finalPhaseElapsed
-    finalPhase = currentPhase or finalPhase or 1
-
+    CaptureFinalResult(GetTime())
     inEncounter = false
     trackingCombat = false
+    activeEncounterID = nil
     encounterStartTime = nil
     phaseStartTime = nil
     InvalidateDisplayCache()
-    if not previewMode then
-        self:StopTicker()
-    end
-    self:UpdateDisplay()
-    self:UpdateVisibility()
+    self:RefreshPresentation()
 end
 
 function PCT:SetPhase(phase, encounterID, testrun)
-    if testrun then
+    if testrun
+        or not inEncounter
+        or not encounterStartTime
+        or encounterID ~= activeEncounterID
+        or not IsValidPhase(phase)
+        or phase == currentPhase
+    then
         return
     end
 
-    local now = GetTime()
-    if not inEncounter or not encounterStartTime then
-        finalCombatElapsed = nil
-        finalPhaseElapsed = nil
-        finalPhase = nil
-    end
-
-    currentPhase = phase or currentPhase or 1
-    phaseStartTime = now
-
-    if not inEncounter then
-        inEncounter = true
-        if trackingCombat then
-            encounterStartTime = now
-        end
-        trackingCombat = false
-    end
-    if not encounterStartTime then
-        encounterStartTime = now
-    end
-
-    self.encounterID = encounterID
+    currentPhase = phase
+    phaseStartTime = GetTime()
     InvalidateDisplayCache()
-    if PCT.db:Get("enabled") then
-        self:StartTicker()
-        self:UpdateDisplay()
+    self:RefreshPresentation()
+end
+
+function PCT:SaveActiveResult()
+    if inEncounter or trackingCombat then
+        CaptureFinalResult(GetTime())
     end
-    self:UpdateVisibility()
 end
 
 local function OnNSRTPhase(owner, event, phase, encounterID, testrun)
@@ -573,7 +587,14 @@ local function RefreshMediaSettings()
     end
 
     PCT:ApplySettings()
-    PCT:RefreshCombatTracking()
+    PCT:RefreshPresentation()
+end
+
+local function InitializeRuntime()
+    RefreshMediaSettings()
+    if IsPlayerInCombat() then
+        PCT:StartCombat()
+    end
 end
 
 local function OnSharedMediaRegistered(event, mediaType, key)
@@ -585,20 +606,14 @@ end
 function PCT:OnEditModeEnter()
     ResetEditModePreview()
     InvalidateDisplayCache()
-    PCT:ApplySettings()
-    PCT:StartTicker()
-    PCT:UpdateDisplay()
-    PCT:UpdateVisibility()
+    self:ApplySettings()
+    self:RefreshPresentation()
 end
 
 function PCT:OnEditModeExit()
     ResetEditModePreview()
     InvalidateDisplayCache()
-    if not inEncounter and not trackingCombat and not previewMode then
-        PCT:StopTicker()
-    end
-    PCT:UpdateDisplay()
-    PCT:UpdateVisibility()
+    self:RefreshPresentation()
 end
 
 local function CreateFrameDisplay()
@@ -641,16 +656,13 @@ function PCT:TogglePreview()
         encounterStartTime = now - 75
         phaseStartTime = now - 18
         currentPhase = 2
-        self:StartTicker()
     elseif not inEncounter then
         encounterStartTime = nil
         phaseStartTime = nil
         currentPhase = 1
-        self:StopTicker()
     end
 
-    self:UpdateDisplay()
-    self:UpdateVisibility()
+    self:RefreshPresentation()
     self:Print(previewMode and "Preview enabled." or "Preview disabled.")
 end
 
@@ -670,7 +682,7 @@ local function RegisterSlashCommands()
                 PCT:ResetDatabase()
                 PCT:RestorePosition()
                 PCT:ApplySettings()
-                PCT:RefreshCombatTracking()
+                PCT:RefreshPresentation()
                 PCT:Print("Settings reset.")
             end,
         },
@@ -702,6 +714,7 @@ local function OnAddonLoaded(self, loadedAddon)
 
     self:UnregisterEvent("ADDON_LOADED")
     PCT:InitializeDatabase()
+    RestoreLastResult()
 
     CreateFrameDisplay()
     PCT:RegisterEditModeSettings()
@@ -718,7 +731,7 @@ local function OnAddonLoaded(self, loadedAddon)
     self:RegisterEvent("PLAYER_LOGOUT")
     isInitialized = true
     if IsLoggedIn() then
-        C_Timer.After(0, RefreshMediaSettings)
+        C_Timer.After(0, InitializeRuntime)
     else
         self:RegisterEvent("PLAYER_LOGIN")
     end
@@ -728,29 +741,30 @@ local EVENT_HANDLERS = {
     ADDON_LOADED = OnAddonLoaded,
     PLAYER_LOGIN = function(self)
         self:UnregisterEvent("PLAYER_LOGIN")
-        RefreshMediaSettings()
+        InitializeRuntime()
     end,
-    ENCOUNTER_START = function()
+    ENCOUNTER_START = function(_, encounterID)
         if isInitialized then
-            PCT:StartEncounter()
+            PCT:StartEncounter(encounterID)
         end
     end,
-    ENCOUNTER_END = function()
+    ENCOUNTER_END = function(_, encounterID)
         if isInitialized then
-            PCT:EndEncounter()
+            PCT:EndEncounter(encounterID)
         end
     end,
     PLAYER_REGEN_DISABLED = function()
         if isInitialized then
-            PCT:RefreshCombatTracking()
+            PCT:StartCombat()
         end
     end,
     PLAYER_REGEN_ENABLED = function()
         if isInitialized then
-            PCT:RefreshCombatTracking()
+            PCT:EndCombat()
         end
     end,
     PLAYER_LOGOUT = function()
+        PCT:SaveActiveResult()
         if NSAPI and NSAPI.UnregisterAllCallbacks then
             NSAPI.UnregisterAllCallbacks(PCT)
         end

@@ -33,11 +33,77 @@ local DEFAULTS = {
     },
 }
 
+local CHARACTER_DEFAULTS = {
+    lastResult = {
+        valid = false,
+        combatElapsed = 0,
+        phaseElapsed = 0,
+        phase = 1,
+    },
+}
+
+local function IsFiniteNumber(value)
+    return type(value) == "number"
+        and value == value
+        and value > -math.huge
+        and value < math.huge
+end
+
+local function IsValidElapsed(value)
+    return IsFiniteNumber(value) and value >= 0
+end
+
+local function IsValidPhase(value)
+    return IsFiniteNumber(value) and value > 0
+end
+
 PCT.defaults = DEFAULTS
 
 function PCT:InitializeDatabase()
     PhasedCombatTimerDB = PhasedCombatTimerDB or {}
+    PhasedCombatTimerCharacterDB = PhasedCombatTimerCharacterDB or {}
     self.db = SimpleDB:New(PhasedCombatTimerDB, DEFAULTS)
+    self.characterDB = SimpleDB:New(PhasedCombatTimerCharacterDB, CHARACTER_DEFAULTS)
+end
+
+function PCT:LoadLastResult()
+    local result = self.characterDB:GetRaw("lastResult")
+    if result == nil then
+        return nil
+    end
+
+    if type(result) ~= "table"
+        or result.valid ~= true
+        or not IsValidElapsed(result.combatElapsed)
+        or not IsValidElapsed(result.phaseElapsed)
+        or not IsValidPhase(result.phase)
+    then
+        self.characterDB:Delete("lastResult")
+        return nil
+    end
+
+    return result.combatElapsed, result.phaseElapsed, result.phase
+end
+
+function PCT:SaveLastResult(combatElapsed, phaseElapsed, phase)
+    if not IsValidElapsed(combatElapsed)
+        or not IsValidElapsed(phaseElapsed)
+        or not IsValidPhase(phase)
+    then
+        return false
+    end
+
+    self.characterDB:Set("lastResult", {
+        valid = true,
+        combatElapsed = combatElapsed,
+        phaseElapsed = phaseElapsed,
+        phase = phase,
+    })
+    return true
+end
+
+function PCT:ClearLastResult()
+    self.characterDB:Delete("lastResult")
 end
 
 function PCT:ResetDatabase()

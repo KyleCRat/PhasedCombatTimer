@@ -134,7 +134,7 @@ local function SetAndApply(value, ...)
     args[#args + 1] = value
     PCT.db:Set(unpack(args))
     PCT:ApplySettings()
-    PCT:RefreshCombatTracking()
+    PCT:RefreshPresentation()
 end
 
 local function CreateCheckboxSetting(name, path, disabled)

@@ -9,8 +9,8 @@ phase changes are provided by Northern Sky Raid Tools.
 - Tracks all player combat by default, including combat outside encounters.
 - Starts a dedicated encounter timer when an encounter begins.
 - Resets the phase timer when Northern Sky Raid Tools reports a phase change.
-- Retains the completed timer values when the frame remains visible after
-  combat.
+- Retains each character's completed timer values between combats, UI reloads,
+  and logins.
 - Can be limited to encounters or hidden while out of combat.
 - Supports configurable out-of-combat opacity when the idle frame is visible.
 - Uses change-based text updates to avoid unnecessary redraws during combat.
@@ -30,7 +30,8 @@ Available controls include:
 - Timer spacing, scale, and phase timer placement.
 - Frame positioning through the standard Edit Mode layout.
 
-Settings and position are stored account-wide.
+Settings and position are stored account-wide. The last completed timer result
+is stored per character.
 
 ## Slash Commands
 
