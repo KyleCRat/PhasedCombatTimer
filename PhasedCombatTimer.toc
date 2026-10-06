@@ -1,8 +1,8 @@
-## Interface: 120007, 120100
+## Interface: 120100, 120105
 ## Title: Phased Combat Timer
 ## Notes: Displays encounter and phase timers using Northern Sky Raid Tools phase detection.
 ## Author: Yvairel
-## Version: 12.1.0-3
+## Version: 12.1.5-4
 ## Category: Raid
 ## IconTexture: Interface\AddOns\PhasedCombatTimer\phased_combat_timer.tga
 ## Dependencies: NorthernSkyRaidTools
